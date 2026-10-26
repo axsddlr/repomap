@@ -62,6 +62,8 @@ npm install -g github:axsddlr/repomap        # then: repomap <command>
 node path/to/skills/repomap/scripts/repomap.mjs <command>   # or just run the file
 ```
 
+If your npm config sets `allow-git=none`, npm refuses GitHub packages: add `--allow-git=all` to the `npx` or `npm install` command.
+
 ## Commands
 
 Run from anywhere inside a repository (repomap finds the git root; `--root DIR` overrides).
