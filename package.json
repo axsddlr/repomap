@@ -1,0 +1,34 @@
+{
+  "name": "@axsddlr/repomap",
+  "version": "0.1.0",
+  "description": "Fast, dependency-free code index for coding agents: symbols, line ranges, imports and search in under a second, so agents read only the lines they need instead of grepping whole repos.",
+  "type": "module",
+  "bin": {
+    "repomap": "skills/repomap/scripts/repomap.mjs"
+  },
+  "files": [
+    "skills/repomap/"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "claude-code",
+    "agent-skill",
+    "code-index",
+    "repo-map",
+    "symbols",
+    "llm",
+    "tokens"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/axsddlr/repomap.git"
+  },
+  "homepage": "https://github.com/axsddlr/repomap#readme",
+  "bugs": "https://github.com/axsddlr/repomap/issues",
+  "license": "MIT"
+}

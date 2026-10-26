@@ -1,0 +1,2 @@
+# LF everywhere: the CLI has a shebang and must run as-is on Linux and macOS.
+* text=auto eol=lf
