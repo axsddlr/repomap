@@ -7,7 +7,8 @@
     "repomap": "skills/repomap/scripts/repomap.mjs"
   },
   "files": [
-    "skills/repomap/"
+    "skills/repomap/",
+    "platforms/"
   ],
   "scripts": {
     "test": "node --test"

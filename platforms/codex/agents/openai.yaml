@@ -1,0 +1,6 @@
+interface:
+  display_name: "repomap"
+  short_description: "Fast dependency-free code index for agents"
+  default_prompt: "Use $repomap to find where a symbol is defined before grepping."
+policy:
+  allow_implicit_invocation: true

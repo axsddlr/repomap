@@ -136,6 +136,38 @@ test('Python: classes, methods by indentation, functions, docstrings, imports', 
   assert.deepEqual(r.imports, ['os', '.db']);
 });
 
+test('file doc: Python module docstring, leading comment blocks, Markdown intro', () => {
+  const py = extract('app/store.py', '#!/usr/bin/env python\n# -*- coding: utf-8 -*-\n"""Loads and stores rows.\n\nMore detail.\n"""\nimport os\n');
+  assert.equal(py.doc, 'Loads and stores rows.');
+  assert.equal(extract('app/empty.py', '""""""\nimport os\n').doc, undefined, 'an empty docstring is not a description');
+  assert.equal(extract('app/bare.py', 'import os\n').doc, undefined);
+
+  const ts = extract('src/s.ts', '#!/usr/bin/env node\n// Owns the login flow.\n// Second line.\nexport const a = 1;\n');
+  assert.equal(ts.doc, 'Owns the login flow.');
+  const js = extract('src/b.js', '/**\n * @param x an unused tag\n * Parses request bodies.\n */\nexport function parse() {}\n');
+  assert.equal(js.doc, 'Parses request bodies.', 'JSDoc tags are skipped');
+  assert.equal(extract('src/c.ts', "import x from 'y';\n// Late comment.\n").doc, undefined, 'code first means no file doc');
+  assert.equal(extract('src/d.js', '/*\n * Copyright (c) 2026 Example\n * SPDX-License-Identifier: MIT\n */\nexport const x = 1;\n').doc, undefined, 'a license banner is not a description');
+  assert.equal(extract('docker/up.sh', '#!/bin/sh\n# Starts the service.\nsetup() { :; }\n').doc, 'Starts the service.');
+
+  const md = extract('README.md', '---\nname: x\n---\n# Title\n\n**A small index.** More words.\n');
+  assert.equal(md.doc, 'A small index. More words.');
+});
+
+test('overview shows the file doc, and files without one carry no doc', () => {
+  const root = repo({ 'src/a.ts': '// Boots the service.\nexport function boot() {}\n', 'src/b.ts': 'export function other() {}\n' });
+  const cache = cacheDir();
+  try {
+    const { index } = buildIndex(root, { cacheDir: cache });
+    assert.equal(index.files['src/b.ts'].doc, undefined);
+    const text = overview(index, { budget: 6000 });
+    assert.match(text, /src\/a\.ts 3 Boots the service\./);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(cache, { recursive: true, force: true });
+  }
+});
+
 test('Go, Rust, Kotlin, shell and Markdown basics', () => {
   const go = extract('pkg/srv.go', 'package srv\n\nimport (\n\t"fmt"\n\t"example.com/x/db"\n)\n\n// Server serves.\ntype Server struct {\n\tn int\n}\n\nfunc (s *Server) Run() error {\n\treturn nil\n}\n\nfunc New() *Server { return &Server{} }\n');
   const g = Object.fromEntries(go.symbols.map((s) => [s.parent ? `${s.parent}.${s.name}` : s.name, s]));

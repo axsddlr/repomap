@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Platform installers: `platforms/` documents and installs the skill for Claude Code, Codex CLI and DeepSeek Harness with `node platforms/install.mjs --target <runtime>` (plus `--project`, `--dir`, `--force`, `--list`). Codex additionally gets `agents/openai.yaml`; the skill folder itself stays single-source and agentskills-compliant.
+- File-level doc line: `extract()` now returns one description per file — the Python module docstring, the leading comment block (JS/TS, Go, Rust, Kotlin, Java, C#, shell; JSDoc tags and license banners skipped), or the first Markdown paragraph. `overview` prints it next to each path, and `outline --json` includes it. An empty or missing doc yields no `doc` field rather than an error.
+
 ## 0.1.0 (2026-10-26)
 
 First release.

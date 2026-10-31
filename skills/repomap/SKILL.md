@@ -19,7 +19,7 @@ node "$HOME/.claude/skills/repomap/scripts/repomap.mjs" <command> [args]
 
 | Command | Use it for | Output |
 | --- | --- | --- |
-| `repomap overview [--budget 6000]` | First look at a repository | Languages, key files (package.json scripts, Dockerfile, CI, manifests), directory sizes, then files ranked by how many others import them, with their top symbols. Capped at the budget, in characters. |
+| `repomap overview [--budget 6000]` | First look at a repository | Languages, key files (package.json scripts, Dockerfile, CI, manifests), directory sizes, then files ranked by how many others import them, each with its one-line doc and top symbols. Capped at the budget, in characters. |
 | `repomap search <words...>` | "Where is X handled?", instead of a grep | Top files ranked by the words in paths, symbol names (camelCase-aware) and doc comments, each with the matching symbols' line ranges. |
 | `repomap find <name>` | Where a symbol is defined | `file:start-end kind Parent.name  // doc` plus the declaration line. Exact match first, then case-insensitive, then substring. Finds class methods and helpers nested inside factory functions too. |
 | `repomap outline <file>` | Before reading a file | Every symbol with its line range and doc line. Then read only the range you need. |

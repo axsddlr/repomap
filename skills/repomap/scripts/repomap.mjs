@@ -181,6 +181,87 @@ function docFor(lines, i, lang) {
   return undefined;
 }
 
+/** Lines that look like a doc but carry no description: JSDoc tags, license banners. */
+const DOC_NOISE = /^(@\w+|copyright\b|\(c\)|spdx-|licen[cs]e[: ])/i;
+
+/** First line of a doc block: skips blanks, JSDoc tags and license banners. */
+function firstDocLine(text) {
+  const t = text.split('\n').map((s) => s.trim()).find((s) => s && !DOC_NOISE.test(s));
+  return t ? clip(t) : undefined;
+}
+
+/** Markdown: the first paragraph line after any front matter and headings. */
+function mdFileDoc(lines) {
+  let i = 0;
+  if ((lines[0] ?? '').trim() === '---') {
+    i = 1;
+    while (i < lines.length && lines[i].trim() !== '---') i++;
+    i++;
+  }
+  let fence = false;
+  for (; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (/^(```|~~~)/.test(t)) { fence = !fence; continue; }
+    if (fence || !t || /^[#>|]/.test(t) || /^([-*+]|\d+\.)\s/.test(t)) continue;
+    return clip(t.replace(/\*\*/g, ''));
+  }
+  return undefined;
+}
+
+/** Python: the module docstring, which is the first statement of the file. */
+function pyFileDoc(lines) {
+  let i = (lines[0] ?? '').startsWith('#!') ? 1 : 0;
+  while (i < lines.length && (!lines[i].trim() || lines[i].trim().startsWith('#'))) i++;
+  const m = /^[rubf]*("""|''')([\s\S]*)$/i.exec((lines[i] ?? '').trim());
+  if (!m) return undefined;
+  const q = m[1];
+  const rest = m[2];
+  const closeAt = rest.indexOf(q);
+  const same = (closeAt === -1 ? rest : rest.slice(0, closeAt)).trim();
+  if (same) return clip(same);
+  if (closeAt !== -1) return undefined;   // an empty docstring says nothing
+  for (let j = i + 1; j < lines.length; j++) {
+    const x = lines[j].trim();
+    if (!x) continue;
+    const end = x.indexOf(q);
+    const text = (end === -1 ? x : x.slice(0, end)).trim();
+    if (text) return clip(text);
+    if (end !== -1) return undefined;
+  }
+  return undefined;
+}
+
+/** One-line description of a file: module docstring, leading comment block, or Markdown intro. */
+function fileDoc(lines, lang) {
+  if (lang === 'md') return mdFileDoc(lines);
+  if (lang === 'py') return pyFileDoc(lines);
+  const hash = lang === 'sh';
+  const isLine = (t) => (hash ? /^#(?!!)/.test(t) : /^\/\/\/?/.test(t));
+  const uncomment = (t) => t.replace(hash ? /^#+\s?/ : /^\/\/+!?\s?/, '');
+  let i = (lines[0] ?? '').startsWith('#!') ? 1 : 0;   // a shebang is not documentation
+  while (i < lines.length && !lines[i].trim()) i++;
+  if (i >= lines.length) return undefined;
+  const t = lines[i].trim();
+  if (t.startsWith('/*')) {
+    const body = [];
+    for (let j = i; j < lines.length && j < i + 80; j++) {
+      const x = lines[j].trim();
+      body.push(x.replace(/^\/\*+!?/, '').replace(/\*+\/$/, '').replace(/^\*\s?/, '').trim());
+      if (x.endsWith('*/')) break;
+    }
+    return firstDocLine(body.join('\n'));
+  }
+  if (!isLine(t)) return undefined;                    // code comes first: the file has no doc
+  const body = [];
+  for (let j = i; j < lines.length && j < i + 80; j++) {
+    const x = lines[j].trim();
+    if (!x) { body.push(''); continue; }
+    if (!isLine(x)) break;
+    body.push(uncomment(x));
+  }
+  return firstDocLine(body.join('\n'));
+}
+
 const TS_RULES = [
   [/^(export\s+)?(default\s+)?(declare\s+)?(async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)/, 5, 'function'],
   [/^(export\s+)?(default\s+)?(declare\s+)?(abstract\s+)?class\s+([A-Za-z_$][\w$]*)/, 5, 'class'],
@@ -200,6 +281,7 @@ const CS_METHOD = new RegExp(`^${KT_MODS}(?:[\\w<>\\[\\],.?]+\\s+)+([A-Za-z_][\\
 export function extract(path, src) {
   const lang = LANG[extname(path).toLowerCase()];
   const lines = src.split(/\r?\n/);
+  const doc = fileDoc(lines, lang);
   const symbols = [];
   const imports = [];
   let pkg;
@@ -225,7 +307,9 @@ export function extract(path, src) {
       const next = heads.slice(k + 1).find((x) => x.level <= h.level);
       symbols.push({ name: h.name, kind: `h${h.level}`, line: h.i + 1, end: next ? next.i : lines.length, exported: true });
     });
-    return { lang, lines: lines.length, symbols, imports };
+    const out = { lang, lines: lines.length, symbols, imports };
+    if (doc) out.doc = doc;
+    return out;
   }
 
   if (lang === 'py') {
@@ -251,7 +335,9 @@ export function extract(path, src) {
         if (ind === 0 || isMethod) add({ name: m[2], kind: isMethod ? 'method' : 'function', i, end: pyEnd(lines, i), exported: !m[2].startsWith('_'), parent: isMethod ? parent.name : undefined });
       }
     });
-    return { lang, lines: lines.length, symbols, imports };
+    const out = { lang, lines: lines.length, symbols, imports };
+    if (doc) out.doc = doc;
+    return out;
   }
 
   const depth = braceDepths(lines, lang);
@@ -353,6 +439,7 @@ export function extract(path, src) {
   // TS/JS: containers pushed inside the loop must be nested by line; keep symbols in source order.
   symbols.sort((a, b) => a.line - b.line);
   const out = { lang, lines: lines.length, symbols, imports };
+  if (doc) out.doc = doc;
   if (pkg) out.pkg = pkg;
   return out;
 }
@@ -609,7 +696,7 @@ export function overview(index, { budget = 6000 } = {}) {
   const dirs = new Map();
   for (const [p] of files) { const parts = p.split('/'); const d = parts.length > 2 ? parts.slice(0, 2).join('/') : parts.length === 2 ? parts[0] : '.'; dirs.set(d, (dirs.get(d) ?? 0) + 1); }
   head.push('dirs: ' + [...dirs.entries()].sort((a, b) => b[1] - a[1]).slice(0, 30).map(([d, n]) => `${d}/ ${n}`).join(', '));
-  head.push('files (most imported / most exported first): path lines [in=importers] symbols');
+  head.push('files (most imported / most exported first): path lines [in=importers] doc, symbols');
   const ranked = files.map(([p, f]) => ({ p, f, rank: (indeg.get(p) ?? 0) * 3 + f.symbols.filter((s) => s.exported && !s.parent).length + (f.lang === 'md' ? -5 : 0) }))
     .sort((a, b) => b.rank - a.rank || a.p.localeCompare(b.p));
   let text = head.join('\n') + '\n';
@@ -617,7 +704,8 @@ export function overview(index, { budget = 6000 } = {}) {
   let shown = 0;
   for (const { p, f } of ranked) {
     const top = f.symbols.filter((s) => !s.parent).slice(0, 8).map((s) => s.name).join(', ');
-    const line = `  ${p} ${f.lines}${indeg.get(p) ? ` [in=${indeg.get(p)}]` : ''}${top ? ' ' + clip(top, 100) : ''}\n`;
+    const doc = f.doc ? ` ${clip(f.doc, 88)}` : '';
+    const line = `  ${p} ${f.lines}${indeg.get(p) ? ` [in=${indeg.get(p)}]` : ''}${doc}${top ? '  ' + clip(top, 80) : ''}\n`;
     if (text.length + line.length + footer(ranked.length).length + 1 > budget) break;
     text += line;
     shown++;
@@ -659,7 +747,7 @@ function main(argv) {
       for (const f of rest) {
         const rel = resolveFile(index, f);
         const syms = index.files[rel].symbols;
-        print({ file: rel, symbols: syms }, `${rel} (${index.files[rel].lines} lines)\n` + syms.map((s) => '  ' + (s.parent ? '  ' : '') + fmtSym(s, false)).join('\n'));
+        print({ file: rel, doc: index.files[rel].doc, symbols: syms }, `${rel} (${index.files[rel].lines} lines)\n` + syms.map((s) => '  ' + (s.parent ? '  ' : '') + fmtSym(s, false)).join('\n'));
       }
       break;
     }

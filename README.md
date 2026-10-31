@@ -5,7 +5,7 @@
 - **One file, no dependencies:** a single Node 18+ script. No Python, no tree-sitter, no native modules, no model calls.
 - **Fast and incremental:** a few hundred files index in well under a second; after that only changed files are re-parsed, so a call takes tens of milliseconds.
 - **Small output:** answers are `file:start-end` ranges, not file dumps. On a 163-file TypeScript/Kotlin project, `repomap search login lockout` printed 828 characters; the equivalent `rg -n -i "login|lockout"` printed 13 KB.
-- **Ships as a Claude Code skill** with instructions that teach the agent to query it before grep. It also works as a plain CLI for any agent or person.
+- **Ships as an agent skill** for Claude Code, Codex CLI and DeepSeek Harness, with instructions that teach the agent to query it before grep. It also works as a plain CLI for any agent or person.
 
 Run on this repository:
 
@@ -30,23 +30,30 @@ skills/repomap/scripts/repomap.mjs:257: const depth = braceDepths(lines, lang);
 
 ## Install
 
-### As a Claude Code skill
+repomap is a standard agent skill — one `SKILL.md` and one script — so the same folder works in every runtime below. Only the destination differs:
 
-With the [skills CLI](https://skills.sh):
+```sh
+git clone https://github.com/axsddlr/repomap
+cd repomap
+node platforms/install.mjs --target claude     # or: codex, dsh
+```
+
+| Runtime | Install directory | Scopes |
+| --- | --- | --- |
+| [Claude Code](platforms/claude/README.md) | `~/.claude/skills/repomap` | `--project` → `.claude/skills/` |
+| [Codex CLI](platforms/codex/README.md) | `$CODEX_HOME/skills/repomap` (default `~/.codex/skills/repomap`) | per machine |
+| [DeepSeek Harness](platforms/dsh/README.md) | `$DSH_HOME/skills/repomap` (default `~/.dsh/skills/repomap`) | `--project` → `.dsh/skills/` |
+
+`--force` updates an existing install, `--list` prints every destination, and `--dir DIR` installs into `DIR/repomap` for anything else. [`platforms/`](platforms/README.md) has the per-runtime details, including the Codex manifest and the `AGENTS.md`/`CLAUDE.md` snippet for each.
+
+The [skills CLI](https://skills.sh) also works for Claude Code and Codex:
 
 ```sh
 npx skills add axsddlr/repomap --skill repomap            # this project
 npx skills add axsddlr/repomap --skill repomap --global   # all projects
 ```
 
-Or by hand:
-
-```sh
-git clone https://github.com/axsddlr/repomap
-cp -r repomap/skills/repomap ~/.claude/skills/repomap      # PowerShell: Copy-Item -Recurse repomap\skills\repomap $HOME\.claude\skills\repomap
-```
-
-Claude Code picks the skill up from its description. To make every session use it before grep, add this to your `~/.claude/CLAUDE.md` (or a project `CLAUDE.md`, or `AGENTS.md` for other agents):
+The agent picks the skill up from its description. To make every session use it before grep, add a block like this to `CLAUDE.md` (Claude Code) or `AGENTS.md` (Codex, DSH and other agents); each [platform README](platforms/README.md) has the block with its own install path:
 
 ```markdown
 ## Code search
@@ -70,7 +77,7 @@ Run from anywhere inside a repository (repomap finds the git root; `--root DIR` 
 
 | Command | What it answers |
 | --- | --- |
-| `overview [--budget N]` | Languages, key files (package.json scripts, Dockerfile, CI, manifests), directory sizes, then files ranked by how many others import them, with their top symbols, within a character budget (default 6000). |
+| `overview [--budget N]` | Languages, key files (package.json scripts, Dockerfile, CI, manifests), directory sizes, then files ranked by how many others import them, each with its one-line file doc and top symbols, within a character budget (default 6000). |
 | `search <words...>` | Files ranked by the words in paths, symbol names (camelCase-aware) and doc comments, each with the matching symbols' line ranges. |
 | `find <name>` | Where a symbol is defined: exact match, then case-insensitive, then substring. Includes class methods and helpers nested in factory functions. |
 | `outline <file>...` | Every symbol in a file with its line range and doc line. |
@@ -83,7 +90,7 @@ Flags: `--json` (machine-readable output), `--limit N`, `--budget N`, `--root DI
 ## How it works
 
 - **Files:** `git ls-files --cached --others --exclude-standard` (honours `.gitignore`), or a directory walk outside git. Build output and dependency folders (`node_modules`, `dist`, `release`, `coverage`, `vendor`, ...) are skipped even when committed; so are binary files and files over 1 MB.
-- **Extraction:** per-language regexes plus a brace-depth pass that skips strings and comments, which gives line ranges for C-like languages. Python uses indentation. Doc lines come from JSDoc/`///`/`//`/`#` comments above a declaration or the first docstring line.
+- **Extraction:** per-language regexes plus a brace-depth pass that skips strings and comments, which gives line ranges for C-like languages. Python uses indentation. Doc lines come from JSDoc/`///`/`//`/`#` comments above a declaration or the first docstring line. Each file also gets one file-level doc line — the Python module docstring, the leading comment block, or a Markdown intro — which `overview` prints next to the path.
 - **Languages:** TypeScript and JavaScript (functions, classes, methods, interfaces, types, enums, exported consts, helpers nested in functions), Python, Go, Rust, Kotlin, Java, C#, shell functions and Markdown headings.
 - **Imports:** TS/JS relative imports (including `.js`-to-`.ts` and `index` files, `export ... from`, `require`, dynamic `import()`), Python modules (relative and absolute), Rust `crate::`/`super::`, Kotlin/Java packages and Go module paths.
 - **Cache:** one JSON file per repository in `~/.cache/repomap/` (override with `REPOMAP_CACHE`), never inside the repository. Entries are refreshed by file size and modified time; a new version of the script re-indexes everything once.
